@@ -1,4 +1,3 @@
-Client\GuiClient.class
 Client\Client.class
+Client\GuiClient.class
 common\Message.class
-Client\GuiClient$1.class

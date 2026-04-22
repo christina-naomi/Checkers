@@ -205,6 +205,15 @@ public class Server{
 					    	    // Update the online players list for everyone else
 					    	    showUserList();
 					    	}
+					    	else if(data.messageType == 9) { // Rematch request
+					    	    callback.accept(threadUsername + " requested a rematch");
+					    	    
+					    	    // For now, just acknowledge and let both players reset
+					    	    Message rematchAck = new Message();
+					    	    rematchAck.messageType = 9;
+					    	    rematchAck.username = threadUsername;
+					    	    updateClients(rematchAck);
+					    	}
 					    	else { //CHAT
 					    		data.username = this.threadUsername;
 					    		

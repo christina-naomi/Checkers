@@ -15,9 +15,19 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
+import javafx.animation.Timeline;
+import javafx.animation.TranslateTransition;
+import javafx.animation.RotateTransition;
+import javafx.util.Duration;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.paint.Color;
+import javafx.scene.layout.Pane;
 
 public class GuiClient extends Application {
-
+	
+	//initalizing all the labels
     TextField c1;
     Button b1;
     HashMap<String, Scene> sceneMap;
@@ -46,6 +56,16 @@ public class GuiClient extends Application {
     private Stage primaryStage;
     
     Label loginErrorLabel = new Label();
+    
+    private int redCaptures = 0;   // Player 1 (Red/Bottom) captures
+    private int blueCaptures = 0;  // Player 2 (Blue/Top) captures
+    private Label redCapturesLabel = new Label("RED: 0");
+    private Label blueCapturesLabel = new Label("BLUE: 0");
+    
+    private Scene gameOverScene;
+    private String currentWinner = "";
+    private String currentLoser = "";
+    private Label gameOverWinnerLabel;
 
     public static void main(String[] args) {
         launch(args);
@@ -60,6 +80,9 @@ public class GuiClient extends Application {
         
         c1 = new TextField();
         b1 = new Button("Send");
+        
+        b1.setOnAction(e -> sendChatMessage());
+        c1.setOnAction(e -> sendChatMessage());
 
         // --- Connection Logic ---
         clientConnection = new Client(data -> {
@@ -112,17 +135,21 @@ public class GuiClient extends Application {
                     logicBoard[m.fromRow][m.fromCol] = 0;
                     
                     if (Math.abs(m.toRow - m.fromRow) == 2) {
-                        logicBoard[(m.toRow + m.fromRow) / 2][(m.toCol + m.fromCol) / 2] = 0;
+                        int midR = (m.toRow + m.fromRow) / 2;
+                        int midC = (m.toCol + m.fromCol) / 2;
+                        int capturedPiece = logicBoard[midR][midC];
+                        logicBoard[midR][midC] = 0;
+                        addCapture(capturedPiece);  // ADD THIS LINE
                     }
                     
                     if (m.toRow == 0 && movingPiece == 1) logicBoard[m.toRow][m.toCol] = 3;
                     if (m.toRow == 7 && movingPiece == 2) logicBoard[m.toRow][m.toCol] = 4;
                     
-                    // Opponent made the move, now it's my turn
                     myTurn = true;
-                    
                     updateBoardVisuals();
                     updateTurnUI();
+                    
+                    checkForWinner();
                 }
                 else if (m.messageType == 7) {
                     primaryStage.setScene(sceneMap.get("client"));
@@ -147,6 +174,23 @@ public class GuiClient extends Application {
                     // Reset find game button
                     findGameBtn.setDisable(false);
                     findGameBtn.setText("Find a Game");
+                }
+                else if (m.messageType == 9) { // Rematch acknowledged
+                    // Reset game for both players
+                    resetLogicBoard();
+                    resetCaptures();
+                    
+                    if (myUsername.equals(m.username)) {
+                        // I requested rematch, opponent agreed
+                        myTurn = true;
+                    } else {
+                        // Opponent requested rematch
+                        myTurn = false;
+                    }
+                    
+                    updateBoardVisuals();
+                    updateTurnUI();
+                    primaryStage.setScene(sceneMap.get("gameBoard"));
                 }
                 else {
                     listItems2.getItems().add((m.username != null ? m.username : "Server") + ": " + m.messageText);
@@ -200,12 +244,13 @@ public class GuiClient extends Application {
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 logicBoard[r][c] = 0;
-                if ((r + c) % 2 != 0) {  // Dark squares only
+                if ((r + c) % 2 != 0) {
                     if (r < 3) logicBoard[r][c] = 2; // Blue pieces (top)
                     else if (r > 4) logicBoard[r][c] = 1; // Red pieces (bottom)
                 }
             }
         }
+        resetCaptures(); // Reset capture counters
     }
 
     public Scene createLobbyScene() {
@@ -254,12 +299,14 @@ public class GuiClient extends Application {
             Message q = new Message(); q.messageType = 7;
             clientConnection.send(q);
             stage.setScene(sceneMap.get("client"));
+            resetCaptures();
         });
         
         turnStatusBtn.setDisable(true); // Signpost only
         HBox topBar = new HBox(15, quitBtn, turnStatusBtn);
         root.setTop(topBar);
-
+        
+     // Board in the center
         GridPane boardGrid = new GridPane();
         boardGrid.setAlignment(Pos.CENTER);
         for (int r = 0; r < 8; r++) {
@@ -283,11 +330,52 @@ public class GuiClient extends Application {
         boardContainer.setAlignment(Pos.CENTER);
         root.setCenter(boardContainer);
 
-        VBox chatBox = new VBox(10, new Label("Game Chat:"), listItems2, new HBox(5, c1, b1));
+        // Right side - Chat with capture panel embedded
+        VBox chatBox = new VBox(10);
         chatBox.setPadding(new Insets(0, 0, 0, 20));
+        chatBox.setMinWidth(320);
+        
+        Label chatLabel = new Label("Game Chat:");
+        chatLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+        
+        // Make the chat list view wider
+        listItems2.setPrefWidth(320);
+        listItems2.setPrefHeight(350);
+        listItems2.setStyle("-fx-font-size: 12px;");
+        
+        HBox chatInput = new HBox(5);
+        c1.setPrefWidth(240);
+        b1.setText("Send");
+        b1.setPrefWidth(70);
+        chatInput.getChildren().addAll(c1, b1);
+        
+        // Capture panel - compact version below chat input
+        HBox capturePanel = new HBox(20);
+        capturePanel.setAlignment(Pos.CENTER);
+        capturePanel.setPadding(new Insets(10));
+        capturePanel.setStyle(
+            "-fx-background-color: #2c3e50; " +
+            "-fx-border-color: #34495e; " +
+            "-fx-border-radius: 5px; " +
+            "-fx-background-radius: 5px;"
+        );
+        
+        Label capturesTitle = new Label("Captures:");
+        capturesTitle.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 13px;");
+        
+        redCapturesLabel.setStyle("-fx-text-fill: #e74c3c; -fx-font-weight: bold; -fx-font-size: 14px;");
+        blueCapturesLabel.setStyle("-fx-text-fill: #3498db; -fx-font-weight: bold; -fx-font-size: 14px;");
+        
+        capturePanel.getChildren().addAll(capturesTitle, redCapturesLabel, blueCapturesLabel);
+        
+        chatBox.getChildren().addAll(chatLabel, listItems2, chatInput, capturePanel);
         root.setRight(chatBox);
+        
+        // Set up chat send
+        b1.setOnAction(e -> sendChatMessage());
+        c1.setOnAction(e -> sendChatMessage());
 
-        return new Scene(root, 1100, 750);
+        return new Scene(root, 1200, 800);
     }
     
 
@@ -365,7 +453,9 @@ public class GuiClient extends Application {
                     if (isJump) {
                         int midR = (toRow + fromRow) / 2;
                         int midC = (toCol + fromCol) / 2;
+                        int capturedPiece = logicBoard[midR][midC];
                         logicBoard[midR][midC] = 0;
+                        addCapture(capturedPiece);
                     }
                     
                     // Kinging logic
@@ -390,7 +480,11 @@ public class GuiClient extends Application {
                     myTurn = false;
                     updateBoardVisuals();
                     updateTurnUI();
-                }
+                    
+                    // Check for winner after move
+                    if (checkForWinner()) {
+                        return; // Stop if game is over
+                    }
             }
             
             // Reset selection
@@ -400,6 +494,7 @@ public class GuiClient extends Application {
             selectedButton = null;
             selectedRow = -1;
             selectedCol = -1;
+            }
         }
     }
 
@@ -430,6 +525,322 @@ public class GuiClient extends Application {
             turnStatusBtn.setText("Waiting...");
             turnStatusBtn.setStyle("-fx-background-color: #ffcccb; -fx-text-fill: black;");
         }
+    }
+    
+    private void sendChatMessage() {
+        String message = c1.getText().trim();
+        if (message.isEmpty()) {
+            return;
+        }
+        
+        Message chatMessage = new Message();
+        chatMessage.messageType = 0;  // Chat message
+        chatMessage.messageText = message;
+        chatMessage.username = myUsername;
+        chatMessage.target = "All";
+        
+        clientConnection.send(chatMessage);
+        c1.clear();
+    }
+    
+    private void updateCaptureLabels() {
+        redCapturesLabel.setText("RED: " + redCaptures);
+        blueCapturesLabel.setText("BLUE: " + blueCaptures);
+        
+        // Optional: Add visual feedback when someone is winning
+        if (redCaptures >= 10) {
+            redCapturesLabel.setStyle("-fx-text-fill: #2ecc71; -fx-font-weight: bold; -fx-font-size: 14px;");
+        } else if (blueCaptures >= 10) {
+            blueCapturesLabel.setStyle("-fx-text-fill: #2ecc71; -fx-font-weight: bold; -fx-font-size: 14px;");
+        } else {
+            redCapturesLabel.setStyle("-fx-text-fill: #e74c3c; -fx-font-weight: bold; -fx-font-size: 14px;");
+            blueCapturesLabel.setStyle("-fx-text-fill: #3498db; -fx-font-weight: bold; -fx-font-size: 14px;");
+        }
+    }
+
+    private void addCapture(int capturedPieceType) {
+    	if (capturedPieceType == 1 || capturedPieceType == 3) {
+            blueCaptures++;
+        } else if (capturedPieceType == 2 || capturedPieceType == 4) {
+            redCaptures++;
+        }
+        updateCaptureLabels();
+        
+        // Check if this capture caused a win
+        checkForWinner();
+    }
+
+    private void resetCaptures() {
+        redCaptures = 0;
+        blueCaptures = 0;
+        updateCaptureLabels();
+    }
+    
+    private boolean checkForWinner() {
+        int redPieces = 0;
+        int bluePieces = 0;
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                if (logicBoard[r][c] == 1 || logicBoard[r][c] == 3) redPieces++;
+                if (logicBoard[r][c] == 2 || logicBoard[r][c] == 4) bluePieces++;
+            }
+        }
+
+        // Condition 1: No pieces left
+        if (redPieces == 0) { showWinner("BLUE (Player 2)"); return true; }
+        if (bluePieces == 0) { showWinner("RED (Player 1)"); return true; }
+
+        // Condition 2: No legal moves for the person who is supposed to go next
+        // If it's my turn, and I can't move, I lose.
+        if (myTurn && !hasLegalMoves(myPlayerNumber)) {
+            showWinner("Opponent");
+            return true;
+        }
+        
+        // If it's the opponent's turn, and they can't move, I win.
+        int opponentNum = (myPlayerNumber == 1) ? 2 : 1;
+        if (!myTurn && !hasLegalMoves(opponentNum)) {
+            showWinner("You");
+            return true;
+        }
+
+        return false;
+    }
+    
+    
+    private boolean hasLegalMoves(int playerNum) {
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                int piece = logicBoard[r][c];
+                
+                // Check if this piece belongs to the requested player
+                boolean isPlayersPiece = (playerNum == 1 && (piece == 1 || piece == 3)) ||
+                                         (playerNum == 2 && (piece == 2 || piece == 4));
+
+                if (isPlayersPiece) {
+                    int[] dr = {-1, -1, 1, 1};
+                    int[] dc = {-1, 1, -1, 1};
+                    
+                    for (int i = 0; i < 4; i++) {
+                        // 1. Check for regular moves
+                        int nr = r + dr[i];
+                        int nc = c + dc[i];
+                        
+                        // Regular pieces can only move in their specific directions
+                        // (Unless you want to simplify and just use your existing logic here)
+                        // For a robust check, reuse your logic from handleCellClick:
+                        if (isValidMoveCheck(r, c, nr, nc, piece, playerNum)) return true;
+
+                        // 2. Check for jump moves
+                        int jr = r + (dr[i] * 2);
+                        int jc = c + (dc[i] * 2);
+                        if (isValidMoveCheck(r, c, jr, jc, piece, playerNum)) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    // Helper to validate a theoretical move for the check
+    private boolean isValidMoveCheck(int fR, int fC, int tR, int tC, int piece, int pNum) {
+        if (tR < 0 || tR >= 8 || tC < 0 || tC >= 8) return false;
+        if (logicBoard[tR][tC] != 0 || (tR + tC) % 2 == 0) return false;
+
+        int dr = tR - fR;
+        int dc = Math.abs(tC - fC);
+        boolean isKing = (piece == 3 || piece == 4);
+
+        if (!isKing) {
+            if (pNum == 1 && dr >= 0) return false; // Red must move up
+            if (pNum == 2 && dr <= 0) return false; // Blue must move down
+        }
+
+        if (Math.abs(dr) == 1 && dc == 1) return true; // Simple move
+
+        if (Math.abs(dr) == 2 && dc == 2) { // Jump move
+            int mR = (fR + tR) / 2;
+            int mC = (fC + tC) / 2;
+            int mP = logicBoard[mR][mC];
+            if (pNum == 1 && (mP == 2 || mP == 4)) return true;
+            if (pNum == 2 && (mP == 1 || mP == 3)) return true;
+        }
+        return false;
+    }
+    
+
+    private void showWinner(String winner) {
+    	Platform.runLater(() -> {
+            currentWinner = winner;
+            
+            // Create game over scene if it doesn't exist
+            if (gameOverScene == null) {
+                gameOverScene = createGameOverScene();
+                sceneMap.put("gameOver", gameOverScene);
+            }
+            
+            // Update winner label
+            if (gameOverWinnerLabel != null) {
+                if (winner.contains("RED") || winner.equals("You") && myPlayerNumber == 1) {
+                    gameOverWinnerLabel.setText(myUsername + " (RED)");
+                } else if (winner.contains("BLUE") || winner.equals("You") && myPlayerNumber == 2) {
+                    gameOverWinnerLabel.setText(myUsername + " (BLUE)");
+                } else if (winner.equals("Opponent")) {
+                    gameOverWinnerLabel.setText("Opponent");
+                } else {
+                    gameOverWinnerLabel.setText(winner);
+                }
+            }
+            
+            // Switch to game over scene
+            primaryStage.setScene(gameOverScene);
+        });
+    }
+    
+    private Scene createGameOverScene() {
+        BorderPane root = new BorderPane();
+        root.setStyle("-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #1a1a2e, #16213e);");
+        
+        // Center content
+        VBox centerBox = new VBox(30);
+        centerBox.setAlignment(Pos.CENTER);
+        centerBox.setPadding(new Insets(50));
+        
+        // Winner announcement
+        Label winnerLabel = new Label();
+        winnerLabel.setStyle("-fx-text-fill: #f1c40f; -fx-font-size: 48px; -fx-font-weight: bold;");
+        
+        Label winnerNameLabel = new Label();
+        winnerNameLabel.setStyle("-fx-text-fill: white; -fx-font-size: 32px; -fx-font-weight: bold;");
+        
+        Label congratulationsLabel = new Label("🎉 CONGRATULATIONS! 🎉");
+        congratulationsLabel.setStyle("-fx-text-fill: #f1c40f; -fx-font-size: 36px; -fx-font-weight: bold;");
+        
+        // Buttons
+        HBox buttonBox = new HBox(30);
+        buttonBox.setAlignment(Pos.CENTER);
+        
+        Button rematchBtn = new Button("🔄 REMATCH");
+        rematchBtn.setStyle(
+            "-fx-background-color: #2ecc71; " +
+            "-fx-text-fill: white; " +
+            "-fx-font-size: 18px; " +
+            "-fx-font-weight: bold; " +
+            "-fx-padding: 12px 24px; " +
+            "-fx-background-radius: 8px;"
+        );
+        rematchBtn.setOnAction(e -> requestRematch());
+        
+        Button lobbyBtn = new Button("🏠 RETURN TO LOBBY");
+        lobbyBtn.setStyle(
+            "-fx-background-color: #e74c3c; " +
+            "-fx-text-fill: white; " +
+            "-fx-font-size: 18px; " +
+            "-fx-font-weight: bold; " +
+            "-fx-padding: 12px 24px; " +
+            "-fx-background-radius: 8px;"
+        );
+        lobbyBtn.setOnAction(e -> returnToLobby());
+        
+        buttonBox.getChildren().addAll(rematchBtn, lobbyBtn);
+        
+        centerBox.getChildren().addAll(
+            congratulationsLabel,
+            winnerLabel,
+            winnerNameLabel,
+            buttonBox
+        );
+        
+        root.setCenter(centerBox);
+        
+        // Add confetti animation (simple version)
+        Pane confettiPane = new Pane();
+        confettiPane.setMouseTransparent(true);
+        root.getChildren().add(confettiPane);
+        
+        // Start confetti animation
+        startConfetti(confettiPane);
+        
+        // Store labels for updating
+        gameOverWinnerLabel = winnerNameLabel;
+        
+        return new Scene(root, 1200, 800);
+    }
+
+    private void startConfetti(Pane confettiPane) {
+        Timeline confettiTimeline = new Timeline();
+        confettiTimeline.setCycleCount(Timeline.INDEFINITE);
+        
+        // Create falling confetti
+        for (int i = 0; i < 100; i++) {
+            javafx.scene.shape.Rectangle confetti = new javafx.scene.shape.Rectangle(8, 8);
+            confetti.setFill(getRandomConfettiColor());
+            confetti.setX(Math.random() * 1200);
+            confetti.setY(Math.random() * 800 - 800);
+            confettiPane.getChildren().add(confetti);
+            
+            // Animate each confetti piece
+            javafx.animation.TranslateTransition transition = new javafx.animation.TranslateTransition(
+                javafx.util.Duration.seconds(3 + Math.random() * 2), 
+                confetti
+            );
+            transition.setByY(900);
+            transition.setCycleCount(Timeline.INDEFINITE);
+            transition.setAutoReverse(false);
+            transition.play();
+            
+            // Add rotation for better effect
+            javafx.animation.RotateTransition rotate = new javafx.animation.RotateTransition(
+                javafx.util.Duration.seconds(1 + Math.random()), 
+                confetti
+            );
+            rotate.setByAngle(360);
+            rotate.setCycleCount(Timeline.INDEFINITE);
+            rotate.play();
+        }
+    }
+
+    private Color getRandomConfettiColor() {
+        Color[] colors = {Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE, Color.PURPLE, Color.ORANGE, Color.PINK};
+        return colors[(int)(Math.random() * colors.length)];
+    }
+    
+    private void requestRematch() {
+        // Send rematch request to server
+        Message rematchMsg = new Message();
+        rematchMsg.messageType = 9;  // New message type for rematch
+        rematchMsg.username = myUsername;
+        clientConnection.send(rematchMsg);
+        
+        // Reset game state
+        resetLogicBoard();
+        resetCaptures();
+        myTurn = true;
+        myPlayerNumber = 1;  // Assuming red starts
+        updateBoardVisuals();
+        updateTurnUI();
+        
+        // Go back to game board
+        primaryStage.setScene(sceneMap.get("gameBoard"));
+    }
+
+    private void returnToLobby() {
+        Message quitMsg = new Message();
+        quitMsg.messageType = 7;  // Quit game
+        clientConnection.send(quitMsg);
+        
+        // Reset all game state
+        myPlayerNumber = 0;
+        myTurn = false;
+        selectedRow = -1;
+        selectedCol = -1;
+        selectedButton = null;
+        resetCaptures();
+        
+        // Go back to lobby
+        primaryStage.setScene(sceneMap.get("client"));
+        findGameBtn.setDisable(false);
+        findGameBtn.setText("Find a Game");
     }
     
 
