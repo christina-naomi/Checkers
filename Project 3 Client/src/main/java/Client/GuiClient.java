@@ -27,33 +27,34 @@ import javafx.scene.layout.Pane;
 
 public class GuiClient extends Application {
 	
-	//initalizing all the labels
-    TextField c1;
-    Button b1;
-    HashMap<String, Scene> sceneMap;
-    Client clientConnection;
+	//initializing all the labels for the UI
+    TextField c1; //chat input
+    Button b1; //chat send button
+    HashMap<String, Scene> sceneMap; //stores the different scenes
+    Client clientConnection; //the background thread that handles the socket I/O
 
-    ListView<String> listItems2;
-    ListView<String> userList;
+    ListView<String> listItems2; //list of chat messages
+    ListView<String> userList; //list of online players connected in lobby
 
     Label user1Label = new Label("Player 1: ---");
     Label user2Label = new Label("Player 2: ---");
 
+    //game state variable
     String myUsername;
     int[][] logicBoard = new int[8][8]; 
     Button[][] boardButtons = new Button[8][8];
     
-    int selectedRow = -1;
+    int selectedRow = -1; //tracks which piece is clicked
     int selectedCol = -1;
     Button selectedButton = null;
 
-    int myPlayerNumber = 0; 
-    boolean myTurn = false; // Start false
+    int myPlayerNumber = 0; //1 for red(bottom) AND 2 for blue(top)
+    boolean myTurn = false; //stops moving pieces when its the opponent's turn
 
     Button turnStatusBtn = new Button("Waiting...");
     Button findGameBtn = new Button("Find a Game");
     
-    private Stage primaryStage;
+    private Stage primaryStage; //reference to the main window
     
     Label loginErrorLabel = new Label();
     
@@ -85,31 +86,39 @@ public class GuiClient extends Application {
         b1.setOnAction(e -> sendChatMessage());
         c1.setOnAction(e -> sendChatMessage());
 
-        // --- Connection Logic ---
+        ///Network response handler that runs ever time the sevrer sends a message for this client
+        /// 
         clientConnection = new Client(data -> {
             Message m = (Message) data;
+            //UI updates happen on JavaFX App Thread
             Platform.runLater(() -> {
+            	
+            	//---TYPE 1: LOGIN RESPONSE---
             	if (m.messageType == 1) {
                     if (m.isNameValid) {
                         myUsername = m.username;
                         primaryStage.setTitle("Checkers - " + myUsername);
-                        primaryStage.setScene(sceneMap.get("client"));
+                        primaryStage.setScene(sceneMap.get("client")); //Goes to lobby
                         loginErrorLabel.setVisible(false); // Hide any previous errors
                     } else {
                         loginErrorLabel.setText(m.messageText);
                         loginErrorLabel.setVisible(true);
                     }
                 }  
+            	
+            	//---TYPE 3: UPDATE LOBBY PLAYER LIST---
                 else if (m.messageType == 3) {
                     userList.getItems().clear();
                     userList.getItems().addAll(m.users);
                 } 
+            	
+            	//---TYPE 5: GAME MATCH FOUND---
                 else if (m.messageType == 5) { // Game Started
                     user1Label.setText("Player 1 (Red): " + m.username);
                     user2Label.setText("Player 2 (Blue): " + m.target);
                     resetLogicBoard();
                     
-                    // CRITICAL: Determine turn based on server message
+                    // Assign players based on who started match request first
                     if (myUsername.equals(m.username)) {
                         myPlayerNumber = 1; 
                         myTurn = true;
@@ -120,44 +129,55 @@ public class GuiClient extends Application {
                     
                     updateBoardVisuals();
                     updateTurnUI();
-                    primaryStage.setScene(sceneMap.get("gameBoard"));
+                    primaryStage.setScene(sceneMap.get("gameBoard")); //move to gameboard
                 } 
-                else if (m.messageType == 6) { // Move Received from Server
-                	
+            	
+            	//---TYPE 6: OPPONENT MOVED A PIECE---
+                else if (m.messageType == 6) {
                 	if (m.username.equals(myUsername)) {
-                        // This is my own move echoing back - just update visuals and ignore
                         updateBoardVisuals();
-                        return;
+                        return; //ignore their own move echoing back
                     }
                     
-                    // This is opponent's move - update the board
+                    //Update the local logic board with the opponent's coordinates
                     int movingPiece = logicBoard[m.fromRow][m.fromCol];
                     logicBoard[m.toRow][m.toCol] = movingPiece;
                     logicBoard[m.fromRow][m.fromCol] = 0;
                     
+                    //Check if it was a jump and remove the capture piece
                     if (Math.abs(m.toRow - m.fromRow) == 2) {
                         int midR = (m.toRow + m.fromRow) / 2;
                         int midC = (m.toCol + m.fromCol) / 2;
                         int capturedPiece = logicBoard[midR][midC];
                         logicBoard[midR][midC] = 0;
-                        addCapture(capturedPiece);  // ADD THIS LINE
+                        addCapture(capturedPiece); 
                     }
                     
+                    //King logic 
                     if (m.toRow == 0 && movingPiece == 1) logicBoard[m.toRow][m.toCol] = 3;
                     if (m.toRow == 7 && movingPiece == 2) logicBoard[m.toRow][m.toCol] = 4;
                     
-                    myTurn = true;
+                    //Converts the moves in the server chat
+                    String moveMsg = m.username + " moved: " + 
+                            convertToNotation(m.fromRow, m.fromCol) + " to " + 
+                            convertToNotation(m.toRow, m.toCol);
+                    listItems2.getItems().add(moveMsg);
+           
+                    myTurn = true; //change turn
                     updateBoardVisuals();
                     updateTurnUI();
-                    
                     checkForWinner();
                 }
+            	
+            	//---TYPE 7: PLAYER QUIT (GO BACK TO LOBBY)---
                 else if (m.messageType == 7) {
                     primaryStage.setScene(sceneMap.get("client"));
                     findGameBtn.setDisable(false);
                     findGameBtn.setText("Find a Game");
                 } 
-                else if(m.messageType == 8) { // Logout response
+            	
+            	//---TYPE 8: LOGOUT (GO BACK TO LOGIN)---
+                else if(m.messageType == 8) {
                     // Clear all game state
                     myUsername = null;
                     myPlayerNumber = 0;
@@ -176,7 +196,9 @@ public class GuiClient extends Application {
                     findGameBtn.setDisable(false);
                     findGameBtn.setText("Find a Game");
                 }
-                else if (m.messageType == 9) { // Rematch acknowledged
+            	
+            	//---TYPE 9: REMATCH AGREEMENT---
+                else if (m.messageType == 9) { 
                     // Reset game for both players
                     resetLogicBoard();
                     resetCaptures();
@@ -193,14 +215,14 @@ public class GuiClient extends Application {
                     updateTurnUI();
                     primaryStage.setScene(sceneMap.get("gameBoard"));
                 }
-                else {
+                else {//Default chat
                     listItems2.getItems().add((m.username != null ? m.username : "Server") + ": " + m.messageText);
                 }
             });
         });
         clientConnection.start();
 
-        // Setup Scenes
+        //Initialize screen layouts
         setupLogin();
         sceneMap.put("client", createLobbyScene());
         sceneMap.put("gameBoard", createGameScene(primaryStage));
@@ -209,9 +231,9 @@ public class GuiClient extends Application {
         primaryStage.show();
     }
 
-    
+    ///First beginning screen that lets the client enter a username plus some styling and design
+    /// 
     private void setupLogin() {
-        // Outer container — dark background
         StackPane outerPane = new StackPane();
         outerPane.setStyle("-fx-background-color: #1a1a2e;");
 
@@ -320,7 +342,9 @@ public class GuiClient extends Application {
 
         sceneMap.put("login", new Scene(outerPane, 500, 420));
     }
-
+    
+    
+    ///When you need to clear the board because the game is over
     private void resetLogicBoard() {
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
@@ -334,8 +358,13 @@ public class GuiClient extends Application {
         resetCaptures(); // Reset capture counters
     }
 
+    
+    ///Create the lobby scene right after you input a correct username. Shows the online players who are currently
+    /// logged in. Theres a find a game button and a logout button to choose from
+    /// Plus lots of styling/design
+    /// 
     public Scene createLobbyScene() {
-        // Outer container — dark background matching login
+        // Outer container so dark background matching login
         StackPane outerPane = new StackPane();
         outerPane.setStyle("-fx-background-color: #1a1a2e;");
 
@@ -504,7 +533,10 @@ public class GuiClient extends Application {
         return new Scene(outerPane, 500, 520);
     }
     
-
+    ///Main part where it builds the whole gameboard/match scene. This assembles all the aspects
+    /// The chat, the board, the pieces, labels and etc
+    /// Plus handles all the styling
+    /// 
     public Scene createGameScene(Stage stage) {
         BorderPane root = new BorderPane();
         root.setStyle("-fx-background-color: #1a1a2e;");
@@ -651,7 +683,7 @@ public class GuiClient extends Application {
          lblLeft.setStyle("-fx-text-fill: #718096; -fx-font-size: 11px; -fx-padding: 0 8px 0 0;");
          labeledBoard.add(lblLeft, 0, r + 1);
 
-         // Right Side Labels (Optional, but helps balance the UI)
+         // Right Side Labels 
          Label lblRight = new Label(String.valueOf(8 - r));
          lblRight.setMinHeight(50);
          lblRight.setMinWidth(20);
@@ -678,12 +710,12 @@ public class GuiClient extends Application {
             "-fx-border-radius: 15;"
         );
 
-        // Left Side: Label and the Chat History list
+        //Label and the Chat History list
         Label chatHeader = new Label("GAME CHAT");
         chatHeader.setStyle("-fx-text-fill: #a0aec0; -fx-font-size: 11px; -fx-font-weight: bold; -fx-letter-spacing: 1px;");
         
-        listItems2.setPrefWidth(300);  // Wider for readability
-        listItems2.setPrefHeight(120); // Shorter for bottom placement
+        listItems2.setPrefWidth(300);
+        listItems2.setPrefHeight(120); 
         listItems2.setStyle(
             "-fx-background-color: #0f3460; " +
             "-fx-background-radius: 10px; " +
@@ -695,7 +727,7 @@ public class GuiClient extends Application {
         );
         VBox chatHistoryBox = new VBox(5, chatHeader, listItems2);
 
-        // Right Side: Grouping Input and Captures
+        //Grouping Input and Captures
         c1.setPromptText("Type...");
         c1.setPrefWidth(140);
         c1.setStyle("-fx-background-color: #0f3460; -fx-text-fill: white; -fx-prompt-text-fill: #718096; -fx-border-color: #2d3748; -fx-border-radius: 8px; -fx-background-radius: 8px; -fx-padding: 8px;");
@@ -706,7 +738,7 @@ public class GuiClient extends Application {
         HBox chatInputRow = new HBox(5, c1, b1);
         chatInputRow.setAlignment(Pos.CENTER);
 
-     // 1. Re-initialize the capturePanel HBox
+        // Re-initialize the capturePanel HBox
         HBox capturePanel = new HBox(12); // Spacing between items
         capturePanel.setAlignment(Pos.CENTER);
         capturePanel.setPadding(new Insets(8));
@@ -717,7 +749,7 @@ public class GuiClient extends Application {
             "-fx-border-width: 1px;"
         );
 
-        // 2. Re-style the labels to make sure they are visible against the dark blue
+        //Re-style the labels to make sure they are visible against the dark blue
         Label capturesTitle = new Label("Captures:");
         capturesTitle.setStyle("-fx-text-fill: #a0aec0; -fx-font-weight: bold; -fx-font-size: 11px;");
         
@@ -728,11 +760,11 @@ public class GuiClient extends Application {
         blueCapturesLabel.setText("BLUE: " + blueCaptures);
         blueCapturesLabel.setStyle("-fx-text-fill: #63b3ed; -fx-font-weight: bold; -fx-font-size: 13px;");
 
-        // 3. Add them to the panel (This "claims" them for this scene)
+        //Add them to the panel
         capturePanel.getChildren().clear(); // Clear any old parents
         capturePanel.getChildren().addAll(capturesTitle, redCapturesLabel, blueCapturesLabel);
 
-        // 4. Put it all together in the controls box
+        //Put it all together in the controls box
         VBox chatControls = new VBox(10, chatInputRow, capturePanel);
         chatControls.setAlignment(Pos.CENTER);
 
@@ -751,7 +783,10 @@ public class GuiClient extends Application {
         return new Scene(root, 620, 820);
     }
     
-
+    
+    ///Handles the logic when a board cell is clicked on and 
+    /// manages selections of pieces and the validations of a move
+    /// 
     private void handleCellClick(int row, int col) {
         if (!myTurn) return;
 
@@ -831,7 +866,7 @@ public class GuiClient extends Application {
                         addCapture(capturedPiece);
                     }
                     
-                    // Kinging logic
+                    // King logic
                     if (myPlayerNumber == 1 && toRow == 0 && (movingPiece == 1 || movingPiece == 3)) {
                         logicBoard[toRow][toCol] = 3;
                     }
@@ -871,6 +906,9 @@ public class GuiClient extends Application {
         }
     }
 
+    ///Refreshes the board visuals and iterates through the logicBoard array
+    ///Places red/blue circles on buttons
+    /// 
     private void updateBoardVisuals() {
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
@@ -890,6 +928,8 @@ public class GuiClient extends Application {
         }
     }
 
+    
+    ///Styling and show cases if its your turn or if you are waiting for the opponent to play
     private void updateTurnUI() {
         if (myTurn) {
             turnStatusBtn.setText("Your Turn!");
@@ -913,6 +953,7 @@ public class GuiClient extends Application {
         }
     }
     
+    ///Takes the text types in the chat and sends to the server
     private void sendChatMessage() {
         String message = c1.getText().trim();
         if (message.isEmpty()) {
@@ -929,11 +970,12 @@ public class GuiClient extends Application {
         c1.clear();
     }
     
+    ///Style of the capture labels
+    /// 
     private void updateCaptureLabels() {
         redCapturesLabel.setText("RED: " + redCaptures);
         blueCapturesLabel.setText("BLUE: " + blueCaptures);
         
-        // Optional: Add visual feedback when someone is winning
         if (redCaptures >= 10) {
             redCapturesLabel.setStyle("-fx-text-fill: #2ecc71; -fx-font-weight: bold; -fx-font-size: 14px;");
         } else if (blueCaptures >= 10) {
@@ -944,6 +986,9 @@ public class GuiClient extends Application {
         }
     }
 
+    
+    ///Adds the number of captures to the scene
+    /// 
     private void addCapture(int capturedPieceType) {
     	if (capturedPieceType == 1 || capturedPieceType == 3) {
             blueCaptures++;
@@ -955,13 +1000,18 @@ public class GuiClient extends Application {
         // Check if this capture caused a win
         checkForWinner();
     }
-
+    
+    ///Reseting captures when game starts over
+    /// 
     private void resetCaptures() {
         redCaptures = 0;
         blueCaptures = 0;
         updateCaptureLabels();
     }
-    
+     
+    ///Goes over board and checks for 0 pieces of 0 legal moves left
+    ///Then triggers the "Winner Scene" if the game over conditions are met
+    /// 
     private boolean checkForWinner() {
         int redPieces = 0;
         int bluePieces = 0;
@@ -972,11 +1022,11 @@ public class GuiClient extends Application {
             }
         }
 
-        // Condition 1: No pieces left
+        //No pieces left
         if (redPieces == 0) { showWinner("BLUE (Player 2)"); return true; }
         if (bluePieces == 0) { showWinner("RED (Player 1)"); return true; }
 
-        // Condition 2: No legal moves for the person who is supposed to go next
+        //No legal moves for the person who is supposed to go next
         // If it's my turn, and I can't move, I lose.
         if (myTurn && !hasLegalMoves(myPlayerNumber)) {
             showWinner("Opponent");
@@ -993,7 +1043,9 @@ public class GuiClient extends Application {
         return false;
     }
     
-    
+    ///Scanner method that looks at every piece on the board and determine if the player 
+    /// is capable of making a move
+    /// 
     private boolean hasLegalMoves(int playerNum) {
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
@@ -1008,16 +1060,14 @@ public class GuiClient extends Application {
                     int[] dc = {-1, 1, -1, 1};
                     
                     for (int i = 0; i < 4; i++) {
-                        // 1. Check for regular moves
+                        //Check for regular moves
                         int nr = r + dr[i];
                         int nc = c + dc[i];
                         
                         // Regular pieces can only move in their specific directions
-                        // (Unless you want to simplify and just use your existing logic here)
-                        // For a robust check, reuse your logic from handleCellClick:
                         if (isValidMoveCheck(r, c, nr, nc, piece, playerNum)) return true;
 
-                        // 2. Check for jump moves
+                        //Check for jump moves
                         int jr = r + (dr[i] * 2);
                         int jc = c + (dc[i] * 2);
                         if (isValidMoveCheck(r, c, jr, jc, piece, playerNum)) return true;
@@ -1028,7 +1078,8 @@ public class GuiClient extends Application {
         return false;
     }
 
-    // Helper to validate a theoretical move for the check
+    /// Helper to validate a theoretical move and checks if the move is valid
+    /// (Similar to hasLegalMoves)
     private boolean isValidMoveCheck(int fR, int fC, int tR, int tC, int piece, int pNum) {
         if (tR < 0 || tR >= 8 || tC < 0 || tC >= 8) return false;
         if (logicBoard[tR][tC] != 0 || (tR + tC) % 2 == 0) return false;
@@ -1055,6 +1106,8 @@ public class GuiClient extends Application {
     }
     
 
+    ///Manages who wins and changes the scene to the final "Game Over" scene
+    /// 
     private void showWinner(String winner) {
         Platform.runLater(() -> {
             currentWinner = winner;
@@ -1063,7 +1116,7 @@ public class GuiClient extends Application {
             gameOverScene = createGameOverScene();
             sceneMap.put("gameOver", gameOverScene);
             
-            // Now update the label (it's freshly set by createGameOverScene)
+            // Updates the labels
             if (gameOverWinnerLabel != null) {
                 if (myPlayerNumber == 1 && (winner.contains("RED") || winner.equals("You"))) {
                     gameOverWinnerLabel.setText(myUsername + " (RED) WINS!");
@@ -1076,10 +1129,15 @@ public class GuiClient extends Application {
                 }
             }
             
-            primaryStage.setScene(gameOverScene);
+            primaryStage.setScene(gameOverScene);//changes to the next scene
         });
     }
     
+    
+    ///Creates the game over scene. Where we show case who the winner is and
+    /// a congratulations text with confetti animation. Also the option to 
+    /// rematch with the same user or go back to the lobby scene and find another player
+    /// 
     private Scene createGameOverScene() {
         BorderPane root = new BorderPane();
         root.setStyle("-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #1a1a2e, #16213e);");
@@ -1136,7 +1194,7 @@ public class GuiClient extends Application {
         
         root.setCenter(centerBox);
         
-        // Add confetti animation (simple version)
+        // Add confetti animation 
         Pane confettiPane = new Pane();
         confettiPane.setMouseTransparent(true);
         root.getChildren().add(confettiPane);
@@ -1150,6 +1208,9 @@ public class GuiClient extends Application {
         return new Scene(root, 1200, 800);
     }
 
+    
+    ///Confetti method that starts the animation and has the confetti falling all over the screen
+    /// 
     private void startConfetti(Pane confettiPane) {
         Timeline confettiTimeline = new Timeline();
         confettiTimeline.setCycleCount(Timeline.INDEFINITE);
@@ -1172,7 +1233,7 @@ public class GuiClient extends Application {
             transition.setAutoReverse(false);
             transition.play();
             
-            // Add rotation for better effect
+            // Add rotation for cool look
             javafx.animation.RotateTransition rotate = new javafx.animation.RotateTransition(
                 javafx.util.Duration.seconds(1 + Math.random()), 
                 confetti
@@ -1183,11 +1244,16 @@ public class GuiClient extends Application {
         }
     }
 
+    
+    ///helper to get different colors for the confetti pieces
     private Color getRandomConfettiColor() {
         Color[] colors = {Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE, Color.PURPLE, Color.ORANGE, Color.PINK};
         return colors[(int)(Math.random() * colors.length)];
     }
     
+    
+    ///Can request a match and replay the same opponent. Goes back to the checkers gameboard
+    /// 
     private void requestRematch() {
         // Send rematch request to server
         Message rematchMsg = new Message();
@@ -1207,6 +1273,9 @@ public class GuiClient extends Application {
         primaryStage.setScene(sceneMap.get("gameBoard"));
     }
 
+    ///Or can return to the lobby so when this button is pressed everything resets and they are returned
+    /// to the lobby so they can pick a new opponent
+    /// 
     private void returnToLobby() {
         Message quitMsg = new Message();
         quitMsg.messageType = 7;  // Quit game
@@ -1226,5 +1295,15 @@ public class GuiClient extends Application {
         findGameBtn.setText("Find a Game");
     }
     
+    ///Moves in server chat were being printed at [1,2] but changed the board to letters and numbers so this method converts
+    /// 
+    private String convertToNotation(int row, int col) {
+        char columnLetter = (char) ('A' + col); // 0 -> A, 1 -> B, etc.
+        int rowNumber = 8 - row;               // Row 0 -> 8, Row 7 -> 1
+        return "" + columnLetter + rowNumber;
+    }
+    
+    
+    ///end of everything!!!!!
 
 }
