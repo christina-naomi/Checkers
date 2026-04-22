@@ -73,6 +73,7 @@ public class GuiClient extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception {
+    	this.primaryStage = primaryStage; 
         sceneMap = new HashMap<>();
         listItems2 = new ListView<>();
         userList = new ListView<>();
@@ -210,17 +211,94 @@ public class GuiClient extends Application {
 
     
     private void setupLogin() {
-    	VBox loginBox = new VBox(10);
-        loginBox.setAlignment(Pos.CENTER);
-        
-        loginErrorLabel.setTextFill(Color.RED);
-        loginErrorLabel.setVisible(false);
-        
+        // Outer container — dark background
+        StackPane outerPane = new StackPane();
+        outerPane.setStyle("-fx-background-color: #1a1a2e;");
+
+        // Card
+        VBox card = new VBox(18);
+        card.setAlignment(Pos.CENTER);
+        card.setMaxWidth(340);
+        card.setPadding(new Insets(40, 36, 40, 36));
+        card.setStyle(
+            "-fx-background-color: #16213e;" +
+            "-fx-background-radius: 16px;" +
+            "-fx-border-color: #0f3460;" +
+            "-fx-border-width: 1.5px;" +
+            "-fx-border-radius: 16px;"
+        );
+
+        // Crown / checkers icon label
+        Label iconLabel = new Label("♟");
+        iconLabel.setStyle("-fx-font-size: 48px;");
+
+        Label titleLabel = new Label("CHECKERS");
+        titleLabel.setStyle(
+            "-fx-text-fill: #f1c40f;" +
+            "-fx-font-size: 28px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-letter-spacing: 4px;"
+        );
+
+        Label subtitleLabel = new Label("Enter a username to play");
+        subtitleLabel.setStyle(
+            "-fx-text-fill: #a0aec0;" +
+            "-fx-font-size: 13px;"
+        );
+
+        // Divider
+        Separator sep = new Separator();
+        sep.setStyle("-fx-background-color: #0f3460;");
+
         TextField t = new TextField();
-        t.setPromptText("Username");
-        t.setMaxWidth(200);
-        
-        Button b = new Button("Connect");
+        t.setPromptText("Username...");
+        t.setMaxWidth(Double.MAX_VALUE);
+        t.setStyle(
+            "-fx-background-color: #0f3460;" +
+            "-fx-text-fill: white;" +
+            "-fx-prompt-text-fill: #718096;" +
+            "-fx-border-color: #2d3748;" +
+            "-fx-border-radius: 8px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 10px 14px;" +
+            "-fx-font-size: 14px;"
+        );
+
+        loginErrorLabel.setTextFill(Color.web("#fc8181"));
+        loginErrorLabel.setStyle("-fx-font-size: 12px;");
+        loginErrorLabel.setVisible(false);
+
+        Button b = new Button("Connect to Server");
+        b.setMaxWidth(Double.MAX_VALUE);
+        b.setStyle(
+            "-fx-background-color: #f1c40f;" +
+            "-fx-text-fill: #1a1a2e;" +
+            "-fx-font-weight: bold;" +
+            "-fx-font-size: 14px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 11px 0;" +
+            "-fx-cursor: hand;"
+        );
+
+        b.setOnMouseEntered(e -> b.setStyle(
+            "-fx-background-color: #d4ac0d;" +
+            "-fx-text-fill: #1a1a2e;" +
+            "-fx-font-weight: bold;" +
+            "-fx-font-size: 14px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 11px 0;" +
+            "-fx-cursor: hand;"
+        ));
+        b.setOnMouseExited(e -> b.setStyle(
+            "-fx-background-color: #f1c40f;" +
+            "-fx-text-fill: #1a1a2e;" +
+            "-fx-font-weight: bold;" +
+            "-fx-font-size: 14px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 11px 0;" +
+            "-fx-cursor: hand;"
+        ));
+
         b.setOnAction(e -> {
             String username = t.getText().trim();
             if (username.isEmpty()) {
@@ -228,16 +306,19 @@ public class GuiClient extends Application {
                 loginErrorLabel.setVisible(true);
                 return;
             }
-            
             loginErrorLabel.setVisible(false);
             Message m = new Message();
             m.username = username;
             m.messageType = 1;
             clientConnection.send(m);
         });
-        
-        loginBox.getChildren().addAll(new Label("Enter Username:"), t, b, loginErrorLabel);
-        sceneMap.put("login", new Scene(loginBox, 300, 200));
+
+        t.setOnAction(e -> b.fire());
+
+        card.getChildren().addAll(iconLabel, titleLabel, subtitleLabel, sep, t, loginErrorLabel, b);
+        outerPane.getChildren().add(card);
+
+        sceneMap.put("login", new Scene(outerPane, 500, 420));
     }
 
     private void resetLogicBoard() {
@@ -254,128 +335,420 @@ public class GuiClient extends Application {
     }
 
     public Scene createLobbyScene() {
-    	Button logoutBtn = new Button("Logout");
+        // Outer container — dark background matching login
+        StackPane outerPane = new StackPane();
+        outerPane.setStyle("-fx-background-color: #1a1a2e;");
+
+        BorderPane root = new BorderPane();
+        root.setStyle("-fx-background-color: transparent;");
+        root.setPadding(new Insets(24));
+
+        // --- TOP BAR ---
+        Label titleLabel = new Label("♟  CHECKERS");
+        titleLabel.setStyle(
+            "-fx-text-fill: #f1c40f;" +
+            "-fx-font-size: 22px;" +
+            "-fx-font-weight: bold;"
+        );
+
+        Label usernameDisplay = new Label("Logged in as: " + (myUsername != null ? myUsername : ""));
+        usernameDisplay.setStyle(
+            "-fx-text-fill: #a0aec0;" +
+            "-fx-font-size: 13px;"
+        );
+
+        Button logoutBtn = new Button("Logout");
+        logoutBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: #fc8181;" +
+            "-fx-border-color: #fc8181;" +
+            "-fx-border-radius: 8px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 7px 16px;" +
+            "-fx-font-size: 13px;" +
+            "-fx-cursor: hand;"
+        );
+        logoutBtn.setOnMouseEntered(e -> logoutBtn.setStyle(
+            "-fx-background-color: #fc8181;" +
+            "-fx-text-fill: #1a1a2e;" +
+            "-fx-border-color: #fc8181;" +
+            "-fx-border-radius: 8px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 7px 16px;" +
+            "-fx-font-size: 13px;" +
+            "-fx-cursor: hand;"
+        ));
+        logoutBtn.setOnMouseExited(e -> logoutBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: #fc8181;" +
+            "-fx-border-color: #fc8181;" +
+            "-fx-border-radius: 8px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 7px 16px;" +
+            "-fx-font-size: 13px;" +
+            "-fx-cursor: hand;"
+        ));
         logoutBtn.setOnAction(e -> {
-            // Just send logout message - don't change scene yet
-            // Wait for server acknowledgment
             Message logoutMsg = new Message();
             logoutMsg.messageType = 8;
             logoutMsg.username = myUsername;
             clientConnection.send(logoutMsg);
-            
-            // Disable logout button to prevent multiple clicks
             logoutBtn.setDisable(true);
             logoutBtn.setText("Logging out...");
         });
-        
+
+        VBox titleBox = new VBox(4, titleLabel, usernameDisplay);
+        titleBox.setAlignment(Pos.CENTER_LEFT);
+
+        HBox topBar = new HBox();
+        topBar.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(titleBox, Priority.ALWAYS);
+        topBar.getChildren().addAll(titleBox, logoutBtn);
+        topBar.setPadding(new Insets(0, 0, 20, 0));
+        root.setTop(topBar);
+
+        // --- CENTER CARD ---
+        VBox centerCard = new VBox(20);
+        centerCard.setAlignment(Pos.TOP_CENTER);
+        centerCard.setPadding(new Insets(28, 28, 28, 28));
+        centerCard.setMaxWidth(420);
+        centerCard.setStyle(
+            "-fx-background-color: #16213e;" +
+            "-fx-background-radius: 16px;" +
+            "-fx-border-color: #0f3460;" +
+            "-fx-border-width: 1.5px;" +
+            "-fx-border-radius: 16px;"
+        );
+
+        // Find Game button
+        findGameBtn.setText("Find a Game");
+        findGameBtn.setMaxWidth(Double.MAX_VALUE);
+        findGameBtn.setStyle(
+            "-fx-background-color: #f1c40f;" +
+            "-fx-text-fill: #1a1a2e;" +
+            "-fx-font-weight: bold;" +
+            "-fx-font-size: 15px;" +
+            "-fx-background-radius: 10px;" +
+            "-fx-padding: 13px 0;" +
+            "-fx-cursor: hand;"
+        );
+        findGameBtn.setOnMouseEntered(e -> {
+            if (!findGameBtn.isDisabled()) findGameBtn.setStyle(
+                "-fx-background-color: #d4ac0d;" +
+                "-fx-text-fill: #1a1a2e;" +
+                "-fx-font-weight: bold;" +
+                "-fx-font-size: 15px;" +
+                "-fx-background-radius: 10px;" +
+                "-fx-padding: 13px 0;" +
+                "-fx-cursor: hand;"
+            );
+        });
+        findGameBtn.setOnMouseExited(e -> {
+            if (!findGameBtn.isDisabled()) findGameBtn.setStyle(
+                "-fx-background-color: #f1c40f;" +
+                "-fx-text-fill: #1a1a2e;" +
+                "-fx-font-weight: bold;" +
+                "-fx-font-size: 15px;" +
+                "-fx-background-radius: 10px;" +
+                "-fx-padding: 13px 0;" +
+                "-fx-cursor: hand;"
+            );
+        });
         findGameBtn.setOnAction(e -> {
-            Message m = new Message(); 
-            m.messageType = 4; 
+            Message m = new Message();
+            m.messageType = 4;
             m.username = myUsername;
             clientConnection.send(m);
             findGameBtn.setDisable(true);
-            findGameBtn.setText("Searching...");
+            findGameBtn.setText("Searching for opponent...");
+            findGameBtn.setStyle(
+                "-fx-background-color: #2d3748;" +
+                "-fx-text-fill: #a0aec0;" +
+                "-fx-font-weight: bold;" +
+                "-fx-font-size: 15px;" +
+                "-fx-background-radius: 10px;" +
+                "-fx-padding: 13px 0;"
+            );
         });
-        
-        // Create a top bar with logout button
-        HBox topBar = new HBox(10);
-        topBar.setAlignment(Pos.CENTER_RIGHT);
-        topBar.getChildren().add(logoutBtn);
-        
-        // Main layout
-        VBox layout = new VBox(20, topBar, findGameBtn, new Label("Online Players:"), userList);
-        layout.setPadding(new Insets(20));
-        
-        return new Scene(layout, 400, 500);
+
+        // Online players section
+        Label playersHeader = new Label("ONLINE PLAYERS");
+        playersHeader.setStyle(
+            "-fx-text-fill: #a0aec0;" +
+            "-fx-font-size: 11px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-letter-spacing: 2px;"
+        );
+
+        userList.setStyle(
+            "-fx-background-color: #0f3460;" +
+            "-fx-background-radius: 10px;" +
+            "-fx-border-color: #2d3748;" +
+            "-fx-border-radius: 10px;" +
+            "-fx-control-inner-background: #0f3460;" +
+            "-fx-font-size: 13px;" +
+            "-fx-text-fill: white;"
+        );
+        userList.setPrefHeight(220);
+
+        Separator sep = new Separator();
+        sep.setStyle("-fx-background-color: #0f3460;");
+
+        centerCard.getChildren().addAll(findGameBtn, sep, playersHeader, userList);
+
+        StackPane cardWrapper = new StackPane(centerCard);
+        cardWrapper.setAlignment(Pos.TOP_CENTER);
+        root.setCenter(cardWrapper);
+
+        outerPane.getChildren().add(root);
+        return new Scene(outerPane, 500, 520);
     }
     
 
     public Scene createGameScene(Stage stage) {
         BorderPane root = new BorderPane();
-        root.setPadding(new Insets(15));
+        root.setStyle("-fx-background-color: #1a1a2e;");
+        root.setPadding(new Insets(10));
 
+        // --- TOP BAR ---
         Button quitBtn = new Button("Quit Game");
+        quitBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: #fc8181;" +
+            "-fx-border-color: #fc8181;" +
+            "-fx-border-radius: 8px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 7px 16px;" +
+            "-fx-font-size: 13px;" +
+            "-fx-cursor: hand;"
+        );
+        quitBtn.setOnMouseEntered(e -> quitBtn.setStyle(
+            "-fx-background-color: #fc8181;" +
+            "-fx-text-fill: #1a1a2e;" +
+            "-fx-border-color: #fc8181;" +
+            "-fx-border-radius: 8px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 7px 16px;" +
+            "-fx-font-size: 13px;" +
+            "-fx-cursor: hand;"
+        ));
+        quitBtn.setOnMouseExited(e -> quitBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: #fc8181;" +
+            "-fx-border-color: #fc8181;" +
+            "-fx-border-radius: 8px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 7px 16px;" +
+            "-fx-font-size: 13px;" +
+            "-fx-cursor: hand;"
+        ));
         quitBtn.setOnAction(e -> {
-            Message q = new Message(); q.messageType = 7;
+            Message q = new Message();
+            q.messageType = 7;
             clientConnection.send(q);
             stage.setScene(sceneMap.get("client"));
             resetCaptures();
         });
-        
-        turnStatusBtn.setDisable(true); // Signpost only
-        HBox topBar = new HBox(15, quitBtn, turnStatusBtn);
+
+        Label gameTitle = new Label("♟  CHECKERS");
+        gameTitle.setStyle(
+            "-fx-text-fill: #f1c40f;" +
+            "-fx-font-size: 20px;" +
+            "-fx-font-weight: bold;"
+        );
+
+        turnStatusBtn.setDisable(true);
+        turnStatusBtn.setStyle(
+            "-fx-background-color: #2d3748;" +
+            "-fx-text-fill: #a0aec0;" +
+            "-fx-font-size: 13px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 7px 16px;" +
+            "-fx-border-radius: 8px;"
+        );
+
+        HBox topBar = new HBox(15);
+        topBar.setAlignment(Pos.CENTER_LEFT);
+        topBar.setPadding(new Insets(0, 0, 10, 0));
+        Region spacer1 = new Region();
+        Region spacer2 = new Region();
+        HBox.setHgrow(spacer1, Priority.ALWAYS);
+        HBox.setHgrow(spacer2, Priority.ALWAYS);
+        topBar.getChildren().addAll(quitBtn, spacer1, gameTitle, spacer2, turnStatusBtn);
         root.setTop(topBar);
-        
-     // Board in the center
+
+        // --- BOARD ---
+        // Player name labels
+        user2Label.setStyle(
+            "-fx-text-fill: #63b3ed;" +
+            "-fx-font-size: 14px;" +
+            "-fx-font-weight: bold;"
+        );
+        user1Label.setStyle(
+            "-fx-text-fill: #fc8181;" +
+            "-fx-font-size: 14px;" +
+            "-fx-font-weight: bold;"
+        );
+
         GridPane boardGrid = new GridPane();
         boardGrid.setAlignment(Pos.CENTER);
+        boardGrid.setStyle(
+            "-fx-border-color: #f1c40f;" +
+            "-fx-border-width: 3px;" +
+            "-fx-border-radius: 4px;"
+        );
+
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 Button cell = new Button();
-                cell.setMinSize(65, 65);
+                cell.setMinSize(50, 50);
+                cell.setMaxSize(50, 50);
                 boardButtons[r][c] = cell;
 
                 if ((r + c) % 2 != 0) {
-                    cell.setStyle("-fx-background-color: #333333;");
+                    cell.setStyle("-fx-background-color: #2d3748; -fx-background-radius: 0;");
                     int row = r; int col = c;
                     cell.setOnAction(e -> handleCellClick(row, col));
                 } else {
-                    cell.setStyle("-fx-background-color: white;");
+                    cell.setStyle("-fx-background-color: #edf2f7; -fx-background-radius: 0;");
                 }
                 boardGrid.add(cell, c, r);
             }
         }
-        
-        VBox boardContainer = new VBox(10, user2Label, boardGrid, user1Label);
+
+        // Row/col labels around the board
+        GridPane labeledBoard = new GridPane();
+        labeledBoard.setAlignment(Pos.CENTER);
+        labeledBoard.setHgap(0);
+        labeledBoard.setVgap(0);
+
+        String[] colLetters = {"A", "B", "C", "D", "E", "F", "G", "H"};
+
+     // Top & Bottom Column Labels (A-H)
+     for (int c = 0; c < 8; c++) {
+         // Top Row
+         Label lblTop = new Label(colLetters[c]);
+         lblTop.setMinWidth(50);
+         lblTop.setAlignment(Pos.CENTER);
+         lblTop.setStyle("-fx-text-fill: #718096; -fx-font-size: 11px; -fx-font-weight: bold;");
+         labeledBoard.add(lblTop, c + 1, 0);
+
+         // Bottom Row
+         Label lblBot = new Label(colLetters[c]);
+         lblBot.setMinWidth(50);
+         lblBot.setAlignment(Pos.CENTER);
+         lblBot.setStyle("-fx-text-fill: #718096; -fx-font-size: 11px; -fx-font-weight: bold;");
+         labeledBoard.add(lblBot, c + 1, 9);
+     }
+
+     // Left & Right Row Labels (8-1)
+     for (int r = 0; r < 8; r++) {
+         // Left Side Labels
+         Label lblLeft = new Label(String.valueOf(8 - r));
+         lblLeft.setMinHeight(50); // Set height to match the cell height
+         lblLeft.setMinWidth(20);
+         lblLeft.setAlignment(Pos.CENTER_RIGHT);
+         lblLeft.setStyle("-fx-text-fill: #718096; -fx-font-size: 11px; -fx-padding: 0 8px 0 0;");
+         labeledBoard.add(lblLeft, 0, r + 1);
+
+         // Right Side Labels (Optional, but helps balance the UI)
+         Label lblRight = new Label(String.valueOf(8 - r));
+         lblRight.setMinHeight(50);
+         lblRight.setMinWidth(20);
+         lblRight.setAlignment(Pos.CENTER_LEFT);
+         lblRight.setStyle("-fx-text-fill: #718096; -fx-font-size: 11px; -fx-padding: 0 0 0 8px;");
+         labeledBoard.add(lblRight, 9, r + 1);
+     }
+
+     // Add the board in the middle (taking up columns 1-8 and rows 1-8)
+     labeledBoard.add(boardGrid, 1, 1, 8, 8);
+
+        VBox boardContainer = new VBox(5, user2Label, labeledBoard, user1Label);
         boardContainer.setAlignment(Pos.CENTER);
         root.setCenter(boardContainer);
 
-        // Right side - Chat with capture panel embedded
-        VBox chatBox = new VBox(10);
-        chatBox.setPadding(new Insets(0, 0, 0, 20));
-        chatBox.setMinWidth(320);
-        
-        Label chatLabel = new Label("Game Chat:");
-        chatLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
-        
-        // Make the chat list view wider
-        listItems2.setPrefWidth(320);
-        listItems2.setPrefHeight(350);
-        listItems2.setStyle("-fx-font-size: 12px;");
-        
-        HBox chatInput = new HBox(5);
-        c1.setPrefWidth(240);
-        b1.setText("Send");
-        b1.setPrefWidth(70);
-        chatInput.getChildren().addAll(c1, b1);
-        
-        // Capture panel - compact version below chat input
-        HBox capturePanel = new HBox(20);
-        capturePanel.setAlignment(Pos.CENTER);
-        capturePanel.setPadding(new Insets(10));
-        capturePanel.setStyle(
-            "-fx-background-color: #2c3e50; " +
-            "-fx-border-color: #34495e; " +
-            "-fx-border-radius: 5px; " +
-            "-fx-background-radius: 5px;"
+     /// --- 3. BOTTOM CHAT (The Vertical Stack) ---
+        HBox chatFooter = new HBox(20); 
+        chatFooter.setAlignment(Pos.CENTER);
+        chatFooter.setPadding(new Insets(15));
+        chatFooter.setStyle(
+            "-fx-background-color: #16213e; " +
+            "-fx-background-radius: 15; " +
+            "-fx-border-color: #0f3460; " +
+            "-fx-border-radius: 15;"
         );
+
+        // Left Side: Label and the Chat History list
+        Label chatHeader = new Label("GAME CHAT");
+        chatHeader.setStyle("-fx-text-fill: #a0aec0; -fx-font-size: 11px; -fx-font-weight: bold; -fx-letter-spacing: 1px;");
         
+        listItems2.setPrefWidth(300);  // Wider for readability
+        listItems2.setPrefHeight(120); // Shorter for bottom placement
+        listItems2.setStyle(
+            "-fx-background-color: #0f3460; " +
+            "-fx-background-radius: 10px; " +
+            "-fx-border-color: #2d3748; " +
+            "-fx-border-radius: 10px; " +
+            "-fx-control-inner-background: #0f3460; " +
+            "-fx-text-fill: white; " +
+            "-fx-font-size: 12px;"
+        );
+        VBox chatHistoryBox = new VBox(5, chatHeader, listItems2);
+
+        // Right Side: Grouping Input and Captures
+        c1.setPromptText("Type...");
+        c1.setPrefWidth(140);
+        c1.setStyle("-fx-background-color: #0f3460; -fx-text-fill: white; -fx-prompt-text-fill: #718096; -fx-border-color: #2d3748; -fx-border-radius: 8px; -fx-background-radius: 8px; -fx-padding: 8px;");
+
+        b1.setText("Send");
+        b1.setStyle("-fx-background-color: #f1c40f; -fx-text-fill: #1a1a2e; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 8px 14px; -fx-cursor: hand;");
+
+        HBox chatInputRow = new HBox(5, c1, b1);
+        chatInputRow.setAlignment(Pos.CENTER);
+
+     // 1. Re-initialize the capturePanel HBox
+        HBox capturePanel = new HBox(12); // Spacing between items
+        capturePanel.setAlignment(Pos.CENTER);
+        capturePanel.setPadding(new Insets(8));
+        capturePanel.setStyle(
+            "-fx-background-color: #0f3460; " +
+            "-fx-background-radius: 10px; " +
+            "-fx-border-color: #2d3748; " +
+            "-fx-border-width: 1px;"
+        );
+
+        // 2. Re-style the labels to make sure they are visible against the dark blue
         Label capturesTitle = new Label("Captures:");
-        capturesTitle.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 13px;");
+        capturesTitle.setStyle("-fx-text-fill: #a0aec0; -fx-font-weight: bold; -fx-font-size: 11px;");
         
-        redCapturesLabel.setStyle("-fx-text-fill: #e74c3c; -fx-font-weight: bold; -fx-font-size: 14px;");
-        blueCapturesLabel.setStyle("-fx-text-fill: #3498db; -fx-font-weight: bold; -fx-font-size: 14px;");
+        // Ensure the capture numbers are styled and have their current text
+        redCapturesLabel.setText("RED: " + redCaptures);
+        redCapturesLabel.setStyle("-fx-text-fill: #fc8181; -fx-font-weight: bold; -fx-font-size: 13px;");
         
+        blueCapturesLabel.setText("BLUE: " + blueCaptures);
+        blueCapturesLabel.setStyle("-fx-text-fill: #63b3ed; -fx-font-weight: bold; -fx-font-size: 13px;");
+
+        // 3. Add them to the panel (This "claims" them for this scene)
+        capturePanel.getChildren().clear(); // Clear any old parents
         capturePanel.getChildren().addAll(capturesTitle, redCapturesLabel, blueCapturesLabel);
-        
-        chatBox.getChildren().addAll(chatLabel, listItems2, chatInput, capturePanel);
-        root.setRight(chatBox);
-        
-        // Set up chat send
+
+        // 4. Put it all together in the controls box
+        VBox chatControls = new VBox(10, chatInputRow, capturePanel);
+        chatControls.setAlignment(Pos.CENTER);
+
+        // Combine Left and Right into the Footer
+        chatFooter.getChildren().addAll(chatHistoryBox, chatControls);
+
+        // Attach to the bottom of the main layout
+        root.setBottom(chatFooter);
+        BorderPane.setMargin(chatFooter, new Insets(10, 0, 0, 0));
+
+        // Button actions
         b1.setOnAction(e -> sendChatMessage());
         c1.setOnAction(e -> sendChatMessage());
 
-        return new Scene(root, 1200, 800);
+        // Final Scene Sizing for half-screen
+        return new Scene(root, 620, 820);
     }
     
 
@@ -504,7 +877,7 @@ public class GuiClient extends Application {
                 int piece = logicBoard[r][c];
                 boardButtons[r][c].setGraphic(null);
                 if (piece != 0) {
-                    Circle circle = new Circle(22);
+                    Circle circle = new Circle(18);
                     circle.setFill((piece == 1 || piece == 3) ? Color.RED : Color.BLUE);
                     circle.setStroke(Color.WHITE);
                     if (piece > 2) { // King
@@ -520,10 +893,23 @@ public class GuiClient extends Application {
     private void updateTurnUI() {
         if (myTurn) {
             turnStatusBtn.setText("Your Turn!");
-            turnStatusBtn.setStyle("-fx-background-color: #90ee90; -fx-text-fill: black; -fx-font-weight: bold;");
+            turnStatusBtn.setStyle(
+                "-fx-background-color: #276749;" +
+                "-fx-text-fill: #9ae6b4;" +
+                "-fx-font-weight: bold;" +
+                "-fx-font-size: 13px;" +
+                "-fx-background-radius: 8px;" +
+                "-fx-padding: 7px 16px;"
+            );
         } else {
             turnStatusBtn.setText("Waiting...");
-            turnStatusBtn.setStyle("-fx-background-color: #ffcccb; -fx-text-fill: black;");
+            turnStatusBtn.setStyle(
+                "-fx-background-color: #2d3748;" +
+                "-fx-text-fill: #a0aec0;" +
+                "-fx-font-size: 13px;" +
+                "-fx-background-radius: 8px;" +
+                "-fx-padding: 7px 16px;"
+            );
         }
     }
     
@@ -670,29 +1056,26 @@ public class GuiClient extends Application {
     
 
     private void showWinner(String winner) {
-    	Platform.runLater(() -> {
+        Platform.runLater(() -> {
             currentWinner = winner;
             
-            // Create game over scene if it doesn't exist
-            if (gameOverScene == null) {
-                gameOverScene = createGameOverScene();
-                sceneMap.put("gameOver", gameOverScene);
-            }
+            // Always recreate so the label is never null
+            gameOverScene = createGameOverScene();
+            sceneMap.put("gameOver", gameOverScene);
             
-            // Update winner label
+            // Now update the label (it's freshly set by createGameOverScene)
             if (gameOverWinnerLabel != null) {
-                if (winner.contains("RED") || winner.equals("You") && myPlayerNumber == 1) {
-                    gameOverWinnerLabel.setText(myUsername + " (RED)");
-                } else if (winner.contains("BLUE") || winner.equals("You") && myPlayerNumber == 2) {
-                    gameOverWinnerLabel.setText(myUsername + " (BLUE)");
+                if (myPlayerNumber == 1 && (winner.contains("RED") || winner.equals("You"))) {
+                    gameOverWinnerLabel.setText(myUsername + " (RED) WINS!");
+                } else if (myPlayerNumber == 2 && (winner.contains("BLUE") || winner.equals("You"))) {
+                    gameOverWinnerLabel.setText(myUsername + " (BLUE) WINS!");
                 } else if (winner.equals("Opponent")) {
-                    gameOverWinnerLabel.setText("Opponent");
+                    gameOverWinnerLabel.setText("Opponent WINS!");
                 } else {
-                    gameOverWinnerLabel.setText(winner);
+                    gameOverWinnerLabel.setText(winner + " WINS!");
                 }
             }
             
-            // Switch to game over scene
             primaryStage.setScene(gameOverScene);
         });
     }
