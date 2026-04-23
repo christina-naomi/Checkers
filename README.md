@@ -38,4 +38,4 @@ This project focused on the intersection of **UI design** and **network synchron
 ---
 
 ## 👥 Collaboration
-This was a collaborative effort between two partners. I focused on [mention if you did more UI or more Networking here], while also contributing to the core move-validation algorithms and debugging the final socket connections.
+This was a collaborative effort between two partners. I focused on server end, while also contributing to the core move-validation algorithms and debugging the final socket connections.
